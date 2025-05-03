@@ -1,0 +1,77 @@
+name: 🚀 Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+jobs:
+  apk-release:
+    name: 📦 Generate APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔄 Checkout Code
+        uses: actions/checkout@v4
+      - name: 🛠️ Setup JDK
+        uses: actions/setup-java@v4.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: 📚 Android-OpenCV-SDK Setup
+        run: ./setupOpenCV.sh
+
+      - name: 🚀 Set execution flag for gradlew
+        run: chmod +x gradlew
+
+      - name: 🗝️ Decode the Keystore
+        run: echo "${{ secrets.KEYSTORE }}" | base64 --decode > ./keystore.jks
+
+        # list files and show pwd for debugging
+      - name: 📂 List files
+        run: |
+          ls -la
+          pwd
+
+      - name: 🏗️ Build Signed APK
+        run: |
+          bash ./gradlew assembleRelease --stacktrace \
+          -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/keystore.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+
+      - name: 📤 Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: app/build/outputs/apk/release/app-release.apk
+
+      - name: Get OpenCV version and versionName
+        run: |
+          echo "opencv_version=$(awk -F'= ' '/def openCVersionName/ { print $2 }' opencvsdk4100/sdk/build.gradle | tr -d '\"')" >> "$GITHUB_ENV"
+          echo "version_name=$(grep -oP 'versionName "\K[^"]+' app/build.gradle)" >> "$GITHUB_ENV"
+          echo "git_hash=$(git rev-parse --verify --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: 🏷️ Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release CvCameraMobile - OpenCV ${{ env.opencv_version }} - Version ${{ env.version_name }} - Git Hash ${{ env.git_hash }}
+          draft: true
+          prerelease: false
+
+      - name: 📤 Upload APK to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./app/build/outputs/apk/release/app-release.apk
+          asset_name: app-release.apk
+          asset_content_type: application/vnd.android.package-archive
