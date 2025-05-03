@@ -12,7 +12,8 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "cvCamera"
+//rootProject.name = "cvCamera"
+rootProject.name = "AiScanner"
 include ':app'
 include ':opencvsdk4100'
 project(":opencvsdk4100").projectDir = file("opencvsdk4100/sdk")
