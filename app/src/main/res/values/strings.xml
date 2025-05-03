@@ -11,4 +11,7 @@
     <string name="sobel_filter">Sobel Filter</string>
     <string name="canny_filter">Canny Filter</string>
     <string name="fire_filter">Fire Filter</string>
+    <string name="id_scan">ID Scan</string>
+    <string name="id_scan_filter">ID Scan filter activated</string>
+
 </resources>

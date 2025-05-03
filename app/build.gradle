@@ -116,7 +116,7 @@ dependencies {
     testImplementation 'androidx.test.ext:junit:1.2.1'
     // Espresso UI Testing
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
-
-
+    // Google ML Kit Text Recognition (on-device, offline)
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
 
 }

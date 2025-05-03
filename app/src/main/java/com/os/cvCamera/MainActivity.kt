@@ -1,6 +1,5 @@
 package com.os.cvCamera
 
-
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.hardware.camera2.CameraAccessException
@@ -38,7 +37,6 @@ class MainActivity : CameraActivity(), CvCameraViewListener2 {
     // Filters id
     private var mFilterId = -1
 
-
     companion object {
         init {
             System.loadLibrary("opencv_java4")
@@ -52,24 +50,15 @@ class MainActivity : CameraActivity(), CvCameraViewListener2 {
         super.onCreate(savedInstanceState)
         Timber.d("OpenCV Version: $OPENCV_VERSION")
 
-
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         mCameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
 
-        //
         loadOpenCVConfigs()
-
-        // Find the flashlight
         findFlashLight()
-
-        // Load buttonConfigs
         configButtons()
-
-        // Load button colors
         setButtonColors()
-
     }
 
     private fun setButtonColors() {
@@ -89,60 +78,50 @@ class MainActivity : CameraActivity(), CvCameraViewListener2 {
 
         binding.bottomAppBar.setOnMenuItemClickListener { menuItem ->
             when (menuItem.itemId) {
-
                 R.id.about -> {
-                    // Get app version and githash from BuildConfig
-                    val cvVer = openCVVersion() // Get OpenCV version from native code
-                    val toast: Toast = Toast.makeText(
+                    val cvVer = openCVVersion()
+                    Toast.makeText(
                         this,
                         "CvCamera-Mobile - Version $VERSION_NAME-$GIT_HASH - OpenCV $cvVer ",
                         Toast.LENGTH_SHORT,
-                    )
-                    toast.show()
-
+                    ).show()
                     true
                 }
 
                 R.id.filters -> {
-                    // Toggle between grayscale,toSepia,toPencilSketch,toSobel,toCanny
+                    // Cycle between filters
                     mFilterId = when (mFilterId) {
                         -1 -> {
                             Toast.makeText(this, getString(R.string.fire_filter), Toast.LENGTH_SHORT).show()
-
                             0
                         }
-
                         0 -> {
                             Toast.makeText(this, getString(R.string.sepia_filter), Toast.LENGTH_SHORT).show()
                             1
                         }
-
                         1 -> {
                             Toast.makeText(this, getString(R.string.sobel_filter), Toast.LENGTH_SHORT).show()
                             2
                         }
-
                         2 -> {
                             Toast.makeText(this, getString(R.string.canny_filter), Toast.LENGTH_SHORT).show()
                             3
                         }
-
                         3 -> {
                             Toast.makeText(this, getString(R.string.grayscale_filter), Toast.LENGTH_SHORT).show()
                             4
                         }
-
                         4 -> {
                             -1
                         }
-
-
-                        else -> {
-                            -1
-                        }
+                        else -> -1
                     }
+                    true
+                }
 
-
+                R.id.idScan -> {
+                    mFilterId = 5
+                    Toast.makeText(this, getString(R.string.id_scan_filter), Toast.LENGTH_SHORT).show()
                     true
                 }
 
@@ -153,11 +132,8 @@ class MainActivity : CameraActivity(), CvCameraViewListener2 {
                     true
                 }
 
-                else -> {
-                    false
-                }
+                else -> false
             }
-
         }
     }
 
@@ -173,7 +149,6 @@ class MainActivity : CameraActivity(), CvCameraViewListener2 {
         binding.CvCamera.enableView()
     }
 
-
     private fun loadOpenCVConfigs() {
         binding.CvCamera.setCameraIndex(mCameraId)
         binding.CvCamera.setCvCameraViewListener(this)
@@ -182,7 +157,6 @@ class MainActivity : CameraActivity(), CvCameraViewListener2 {
         binding.CvCamera.enableView()
         binding.CvCamera.getCameraDevice()
     }
-
 
     private fun enableFlashLight() {
         mTorchState = true
@@ -193,12 +167,9 @@ class MainActivity : CameraActivity(), CvCameraViewListener2 {
     private fun findFlashLight() {
         for (cameraId in mCameraManager.cameraIdList) {
             try {
-                // Check if the camera has a torchlight
                 val hasTorch = mCameraManager.getCameraCharacteristics(cameraId)
                     .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) ?: false
-
                 if (hasTorch) {
-                    // Find the ID of the camera that has a torchlight and store it in mTorchCameraId
                     Timber.d("Torch is available")
                     Timber.d("Camera Id: $cameraId")
                     mTorchCameraId = cameraId
@@ -208,7 +179,6 @@ class MainActivity : CameraActivity(), CvCameraViewListener2 {
                     Timber.d("Torch is not available")
                 }
             } catch (e: CameraAccessException) {
-                // Handle any errors that occur while trying to access the camera
                 Timber.e("CameraAccessException ${e.message}")
             }
         }
@@ -226,47 +196,42 @@ class MainActivity : CameraActivity(), CvCameraViewListener2 {
 
     override fun onCameraFrame(inputFrame: CvCameraViewFrame?): Mat {
         return if (inputFrame != null) {
-
             if (mCameraId == CAMERA_ID_BACK) {
                 mRGBA = inputFrame.rgba()
                 cvFilters(mRGBA)
             } else {
                 mRGBA = inputFrame.rgba()
-                // Flipping to show portrait mode properly
                 Core.flip(mRGBA, mRGBAT, 1)
-                // Release the matrix to avoid memory leaks
                 mRGBA.release()
-                // Check if grayscale is enabled
                 cvFilters(mRGBAT)
             }
-
         } else {
-            // return last or empty frame
             mRGBA
         }
     }
 
     private fun cvFilters(frame: Mat): Mat {
         return when (mFilterId) {
-            0 -> {
-                frame.fireDetection(this)
-            }
-            1 -> {
-                frame.toSepia()
-            }
-            2 -> {
-                frame.toSobel()
-            }
-            3 -> {
-                frame.toCanny()
-            }
-            4 -> {
-                frame.toGray()
+            0 -> frame.fireDetection(this)
+            1 -> frame.toSepia()
+            2 -> frame.toSobel()
+            3 -> frame.toCanny()
+            4 -> frame.toGray()
+            5 -> {
+                frame.idScan(this) { idNumber ->
+                    // Handle the result of ID scan if needed
+                    if (idNumber != null) {
+                        Timber.d("Detected ID: $idNumber")
+                    } else {
+                        Timber.d("No ID detected")
+                    }
+                }
+                frame // Return the same frame after the scan
             }
             else -> frame
         }
-
     }
+
 
     override fun onDestroy() {
         Timber.d("onDestroy")

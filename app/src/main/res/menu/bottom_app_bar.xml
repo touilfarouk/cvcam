@@ -25,4 +25,11 @@
         android:title="@string/resizeCanvas"
         app:showAsAction="ifRoom"/>
 
+    <item
+        android:id="@+id/idScan"
+        android:title="@string/id_scan"
+        android:icon="@drawable/baseline_document_scanner_24"
+        app:showAsAction="ifRoom"/>
+
+
 </menu>

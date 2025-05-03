@@ -1,12 +1,23 @@
 package com.os.cvCamera
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.media.MediaPlayer
+import android.util.Log
+import android.widget.Toast
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import org.opencv.android.Utils
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.CvType.CV_8UC1
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
+import org.opencv.core.Rect
 import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
@@ -45,8 +56,7 @@ fun Mat.toCanny(): Mat {
     return tmpMat
 }
 
-
-private var mediaPlayer: MediaPlayer? = null  // Declare the MediaPlayer instance globally
+private var mediaPlayer: MediaPlayer? = null
 
 fun Mat.fireDetection(context: Context): Mat {
     val result = Mat()
@@ -66,28 +76,17 @@ fun Mat.fireDetection(context: Context): Mat {
     val contours = ArrayList<MatOfPoint>()
     Imgproc.findContours(mask, contours, Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
 
-    // Flag to check if fire is currently detected
     var fireDetected = false
 
     for (contour in contours) {
         val boundingRect = Imgproc.boundingRect(contour)
-
-        // Check if the detected region has a size between 30 and 150 pixels
         if (boundingRect.width in 30..150 && boundingRect.height in 30..150) {
-            // Fire detected
             println("Fire Detected! Playing the alarm sound.")
-
-            // Set the flag to true
             fireDetected = true
-
-            // Play the alarm sound from assets
             playAlarmSound(context)
-
-            // You can add additional logic here if needed
         }
     }
 
-    // If fire is not detected, stop the alarm
     if (!fireDetected) {
         stopAlarm()
     }
@@ -97,28 +96,19 @@ fun Mat.fireDetection(context: Context): Mat {
 
 private fun playAlarmSound(context: Context) {
     try {
-        // Open a file descriptor for the alarm sound in assets
         val alarmFileDescriptor = context.assets.openFd("alarm.mp3")
-
-        // Create a MediaPlayer instance if not already created
         if (mediaPlayer == null) {
             mediaPlayer = MediaPlayer()
         }
-
-        // Set the data source from the file descriptor
         mediaPlayer?.setDataSource(
             alarmFileDescriptor.fileDescriptor,
             alarmFileDescriptor.startOffset,
             alarmFileDescriptor.length
         )
-
-        // Prepare and start the MediaPlayer
         mediaPlayer?.prepare()
         mediaPlayer?.start()
-
-        // Release the MediaPlayer resources when finished
         mediaPlayer?.setOnCompletionListener {
-            stopAlarm()  // Stop the alarm when playback is completed
+            stopAlarm()
         }
 
     } catch (e: Exception) {
@@ -127,9 +117,71 @@ private fun playAlarmSound(context: Context) {
 }
 
 private fun stopAlarm() {
-    // Stop the alarm playback if the MediaPlayer instance is not null
     mediaPlayer?.stop()
     mediaPlayer?.release()
-    mediaPlayer = null  // Set MediaPlayer instance to null after release
+    mediaPlayer = null
 }
 
+/**
+ * Detects ID number text from a card image using ML Kit Text Recognition
+ */
+
+fun Mat.idScan(context: Context, onResult: (String?) -> Unit) {
+    val bitmap = Bitmap.createBitmap(this.cols(), this.rows(), Bitmap.Config.ARGB_8888)
+    Utils.matToBitmap(this, bitmap)
+
+    val image = InputImage.fromBitmap(bitmap, 0)
+    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+
+    recognizer.process(image)
+        .addOnSuccessListener { visionText ->
+            var idNumber: String? = null
+            var boundingBox: android.graphics.Rect? = null
+
+            // Accumulate all numeric text blocks (concatenated digits)
+            val digitSequences = mutableListOf<Pair<String, android.graphics.Rect?>>()
+
+            for (block in visionText.textBlocks) {
+                for (line in block.lines) {
+                    val digitsInLine = line.text.replace("[^\\d]".toRegex(), "") // remove non-digits
+                    if (digitsInLine.length >= 14) { // heuristic: likely part of ID number
+                        digitSequences.add(Pair(digitsInLine, line.boundingBox))
+                    }
+                }
+            }
+
+            // Combine all sequences and check if we get 18 digits
+            val combinedDigits = digitSequences.joinToString("") { it.first }
+
+            if (combinedDigits.length == 18) {
+                idNumber = combinedDigits
+
+                // Optionally: merge bounding boxes (or just take first one)
+                boundingBox = digitSequences.firstOrNull()?.second
+
+                // Draw green rectangle
+                boundingBox?.let {
+                    val canvas = Canvas(bitmap)
+                    val paint = Paint().apply {
+                        color = Color.GREEN
+                        strokeWidth = 5f
+                        style = Paint.Style.STROKE
+                    }
+                    canvas.drawRect(it, paint)
+                }
+
+                Toast.makeText(context, "ID Number Detected: $idNumber", Toast.LENGTH_LONG).show()
+                Log.d("IDScan", "Detected ID Number: $idNumber")
+            } else {
+                Toast.makeText(context, "No valid 18-digit ID number detected", Toast.LENGTH_SHORT).show()
+                Log.d("IDScan", "No valid 18-digit ID number detected")
+            }
+
+            onResult(idNumber)
+        }
+        .addOnFailureListener { e ->
+            e.printStackTrace()
+            Toast.makeText(context, "Text recognition failed", Toast.LENGTH_SHORT).show()
+            onResult(null)
+        }
+}
